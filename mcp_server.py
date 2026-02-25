@@ -8,10 +8,27 @@ import base64
 import tempfile
 import os
 from dotenv import load_dotenv
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 # Load environment variables from .env file
 load_dotenv()
 
+# --- API Key Protection ---
+MCP_API_KEY = os.getenv("MCP_API_KEY")
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if MCP_API_KEY:
+            provided_key = request.headers.get("x-mcp-key")
+            if provided_key != MCP_API_KEY:
+                return JSONResponse(
+                    {"error": "Unauthorized"},
+                    status_code=401
+                )
+        return await call_next(request)
+
+# --- End API Key Protection ---
 
 INSTRUCTIONS = """
 This server provides access to Google's Ads Transparency Center data through the ScrapeCreators API.
@@ -31,6 +48,7 @@ mcp = FastMCP(
    instructions=INSTRUCTIONS
 )
 
+mcp.app.add_middleware(APIKeyMiddleware)
 
 @mcp.tool(
   description="Retrieve currently running ads for a company from Google Ads Transparency Center. Use this tool to get ads for a company using their domain (e.g., 'nike.com') or advertiser ID. You can filter by topic (including political ads) and region. For complete analysis of visual elements, colors, design, or image content, you MUST also use analyze_ad_image on the imageUrl from each ad's details.",
